@@ -9,7 +9,7 @@ const PORT = 3000;
 app.use(express.json());
 
 // Use environment variables for credentials
-const MONGO_URI = process.env.MONGO_URI || "your_mongo_connection_string_here";
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://madhu:Y2Uzso0HTdkKiuRy@users.fof7b.mongodb.net/?retryWrites=true&w=majority&appName=users";
 const client = new MongoClient(MONGO_URI, {
   serverApi: {
     version: ServerApiVersion.v1,
