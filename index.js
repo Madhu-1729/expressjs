@@ -9,9 +9,12 @@ const PORT = 3009;
 // Middleware to parse JSON
 app.use(express.json());
 
+app.set("trust proxy", true);
+
+
 // Simple GET API
 app.get("/", (req, res) => {
-  res.send("your Remote address is="+req.socket.remoteAddress+"| Your IP is="+req.ip);
+  res.send("your Remote address is="+req.socket.remoteAddress+"| Your IP is="+req.ip+"\\"+ req.headers["x-forwarded-for"] );
 });
 
 app.get("/user/:id", (req, res) => {
