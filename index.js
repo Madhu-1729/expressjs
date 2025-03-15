@@ -11,7 +11,7 @@ app.use(express.json());
 
 // Simple GET API
 app.get("/", (req, res) => {
-  res.send("Welcome to Express API restarted with nodemon!");
+  res.send("your Remote address is="+req.socket.remoteAddress+"| Your IP is="+req.ip);
 });
 
 app.get("/user/:id", (req, res) => {
@@ -54,6 +54,7 @@ connectMongo();
 // Route to fetch users from MongoDB (example)
 app.get("/movies", async (req, res) => {
     try {
+      console.log(req)
         const database = client.db("sample_mflix");
         const collection = database.collection("movies");
 
@@ -68,7 +69,7 @@ app.get("/movies", async (req, res) => {
             .limit(limit)
             .toArray();
 
-        res.json(movies);
+        res.json({"data":req.ip});
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Internal Server Error" });
