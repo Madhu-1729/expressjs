@@ -18,15 +18,32 @@ const client = new MongoClient(MONGO_URI, {
   },
 });
 
-// Connect to MongoDB once, reuse connection
+// Function to generate a unique session ID
+function generateSessionId() {
+  return Math.random().toString(36).substring(2, 8) + "-" + Math.random().toString(36).substring(2, 8);
+}
+
+// Connect to MongoDB once and reuse connection
 let db;
 async function connectMongo() {
   try {
     await client.connect();
-    db = client.db("users");
+    db = client.db("sessions"); // Use the correct database name
     console.log("✅ Successfully connected to MongoDB!");
+    await createTTLIndex();
+
   } catch (error) {
     console.error("❌ Error connecting to MongoDB:", error);
+    process.exit(1); // Exit if MongoDB connection fails
+  }
+}
+async function createTTLIndex() {
+  try {
+    const sessionsCollection = db.collection("tokens");
+    await sessionsCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 10800 }); // 3 hours = 10800 seconds
+    console.log("✅ TTL Index created for automatic session expiration");
+  } catch (error) {
+    console.error("❌ Error creating TTL index:", error);
   }
 }
 connectMongo();
@@ -44,86 +61,66 @@ app.get("/user/:id", (req, res) => {
   res.send(req.params.id);
 });
 
-// **POST Request Example**
-app.post("/data", (req, res) => {
-  const { name, age } = req.body;
-  res.json({ message: `Hello ${name}, you are ${age} years old.` });
-});
+// **Create Session and Store in MongoDB**
+const { ObjectId } = require("mongodb");
 
-// **Fetch Movies from MongoDB**
-app.get("/movies", async (req, res) => {
+app.post("/session", async (req, res) => {
+  const { boxid } = req.body;
+  
+  if (!boxid) {
+    return res.status(400).json({ error: "boxid is required" });
+  }
+
   try {
-    const database = client.db("sample_mflix");
-    const collection = database.collection("movies");
+    const sessionid = generateSessionId();
+    
+    // Set expiration time (3 hours from now)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 3); 
 
-    let page = parseInt(req.query.page) || 1;
-    let limit = parseInt(req.query.limit) || 10;
-    let skip = (page - 1) * limit;
+    // Insert into MongoDB
+    const sessionsCollection = db.collection("tokens");
+    await sessionsCollection.insertOne({ 
+      boxid, 
+      sessionid, 
+      expiresAt 
+    });
 
-    const movies = await collection.find({}).skip(skip).limit(limit).toArray();
-    res.json({ data: movies });
+    res.json({ response: { boxid, sessionid, expiresAt } });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("❌ Error creating session:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-// **Fetch Planets from MongoDB**
-app.get("/planets", async (req, res) => {
-  try {
-    const database = client.db("sample_guides");
-    const collection = database.collection("planets");
 
-    const planets = await collection.find({}).toArray();
-    res.json(planets);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+app.post("/auth", async (req, res) => {
+  const { email } = req.body;
+  const boxid = req.headers["boxid"];
+  const sessionid = req.headers["sessionid"];
+
+  if (!boxid || !sessionid) {
+    return res.status(400).json({ error: "boxid and sessionid are required in headers" });
   }
-});
 
-// **Insert/Update Document**
-app.post("/pagination_test", async (req, res) => {
   try {
-    const { _id, name } = req.body;
-    if (!_id || !name) {
-      return res.status(400).json({ message: "_id and name are required" });
+    const sessionsCollection = db.collection("tokens");
+    console.log("sessionsCollection",{boxid,sessionid})
+    // Check if the provided boxid and sessionid exist in the database
+    const existingSession = await sessionsCollection.findOne({boxid,sessionid});
+console.log("existingSession",existingSession)
+    if (!existingSession) {
+      return res.status(401).json({ error: "Unauthorized: Invalid boxid or sessionid" });
     }
 
-    const database = client.db("sample_guides");
-    const collection = database.collection("pagination_test");
-
-    const filter = { _id };
-    const updateDoc = { $set: { name } };
-    const options = { upsert: true };
-
-    const result = await collection.updateOne(filter, updateDoc, options);
-    res.json({ message: result.matchedCount > 0 ? "Document updated" : "Document inserted" });
+    // If valid, return success response
+    res.json({ message: "Authenticated", email });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("❌ Error during authentication:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-// **Delete Document**
-app.delete("/pagination_test", async (req, res) => {
-  try {
-    const { _id } = req.body;
-    if (!_id) {
-      return res.status(400).json({ message: "_id is required" });
-    }
-
-    const database = client.db("sample_guides");
-    const collection = database.collection("pagination_test");
-
-    const result = await collection.deleteOne({ _id });
-
-    res.json({ message: result.deletedCount === 1 ? "Document deleted" : "Document not found" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
 
 // **Start Server**
 app.listen(PORT, () => {
