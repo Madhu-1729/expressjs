@@ -53,7 +53,18 @@ app.set("trust proxy", true);
 
 // **Simple Routes**
 app.get("/", (req, res) => {
-  const clientIP = req.headers["x-forwarded-for"] || req.connection.remoteAddress || req.ip;
+  // Check if x-forwarded-for header exists
+  let clientIP = req.headers['x-forwarded-for'];
+
+  // If x-forwarded-for exists, get the first IP in the list
+  if (clientIP) {
+    // In case there are multiple proxies, take the first IP from the list
+    clientIP = clientIP.split(',')[0];
+  } else {
+    // Fall back to the remote address if x-forwarded-for doesn't exist
+    clientIP = req.connection.remoteAddress || req.ip;
+  }
+
   res.send(`Your IP is: ${clientIP}`);
 });
 
